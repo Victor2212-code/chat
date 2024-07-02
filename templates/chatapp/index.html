@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Search</title>
+    {% load static %}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="{% static 'styles/style.css' %}">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="header">
+            <h1>Chat Search</h1>
+            <span class="list-icon" onclick="toggleSelectedPlaces()">&#9776;</span>
+        </div>
+        <div id="chatbox"></div>
+        <input type="text" id="message" placeholder="Type your message..." />
+        <button onclick="sendMessage()">Send</button>
+        <div id="selected-places">
+            <h3>Selected Places</h3>
+            <ul id="places-list"></ul>
+            <button id="navigate-btn" style="display: none;" onclick="navigateToSelectedPlaces()">Navigate to Selected Places</button>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlaces = [];
+
+        function getLocation(callback) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    callback(position.coords.latitude, position.coords.longitude);
+                });
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        function sendMessage() {
+            const message = $('#message').val().trim();
+            if (message === '') return;
+
+            $('#chatbox').append('<div class="user-message">' + message + '</div>');
+            $('#message').val('');
+
+            getLocation(function(lat, lon) {
+                $.get('/search/', { query: message, lat: lat, lon: lon }, function(data) {
+                    if (data.results.length > 0) {
+                        let results = data.results.map(place => `
+                            <div class="bot-message">
+                                <div class="place-details">
+                                    <strong>${place.name}</strong><br>
+                                    Address: ${place.vicinity}<br>
+                                    Distance: ${place.distance} km<br>
+                                    <button onclick="selectPlace('${place.name}', '${place.vicinity}', ${place.distance}, ${place.geometry.location.lat}, ${place.geometry.location.lng})">Select</button>
+                                </div>
+                            </div>
+                        `).join('');
+                        $('#chatbox').append(results);
+                    } else {
+                        $('#chatbox').append('<div class="bot-message">No results found.</div>');
+                    }
+                    $('#chatbox').scrollTop($('#chatbox')[0].scrollHeight);
+                });
+            });
+        }
+
+        function selectPlace(name, address, distance, lat, lon) {
+            const place = { name, address, distance, lat, lon };
+            selectedPlaces.push(place);
+            updateSelectedPlacesList();
+        }
+
+        function updateSelectedPlacesList() {
+            const placesList = $('#places-list');
+            placesList.empty();
+            selectedPlaces.forEach((place, index) => {
+                placesList.append(`
+                    <li>
+                        <strong>${place.name}</strong><br>
+                        Address: ${place.address}<br>
+                        Distance: ${place.distance} km<br>
+                        <button onclick="removePlace(${index})">Remove</button>
+                    </li>
+                `);
+            });
+            $('#navigate-btn').toggle(selectedPlaces.length > 0);
+        }
+
+        function removePlace(index) {
+            selectedPlaces.splice(index, 1);
+            updateSelectedPlacesList();
+        }
+
+        function navigateToSelectedPlaces() {
+            if (selectedPlaces.length === 0) return;
+
+            const origin = selectedPlaces[0];
+            const waypoints = selectedPlaces.slice(1).map(place => `via:${place.lat},${place.lon}`).join('|');
+            const destination = selectedPlaces[selectedPlaces.length - 1];
+            const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&waypoints=${waypoints}`;
+            window.open(mapsUrl, '_blank');
+        }
+
+        function toggleSelectedPlaces() {
+            $('#selected-places').toggle();
+        }
+        
+        $('#chatbox').on('DOMNodeInserted', function() {
+            $(this).scrollTop($(this)[0].scrollHeight);
+        });
+    </script>
+</body>
+</html>
